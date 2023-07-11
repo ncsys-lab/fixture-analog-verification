@@ -10,3 +10,4 @@ from .mac import MACTemplate
 from .cap_dac import DACTemplate
 from .amplifier import AmplifierTemplate
 from .diffamp_debug import DiffAmpDebugTemplate
+from .comparator_latch import ComparatorLatchTemplate

@@ -5,7 +5,7 @@
 R0 vnb vgnd 0
 R1 vpb vpwr 0
 R2 a_512_1261# outp 0
-R3 a_512_1261# outn 0
+R3 a_519_81# outn 0
 X0 a_612_1321# a_512_1261# a_123_187# vnb sky130_fd_pr__nfet_g5v0d10v5 w=5e+06u l=500000u nf=5
 X1 a_612_1321# VREF a_519_81# vnb sky130_fd_pr__nfet_g5v0d10v5 w=10e+06u l=500000u nf=10
 X2 vpwr OUT a_3401_885# vpb sky130_fd_pr__pfet_g5v0d10v5 w=1.5e+06u l=500000u
