@@ -4,6 +4,7 @@ import functools
 import numpy as npy
 import scipy
 
+
 from fixture import TemplateMaster, PlotHelper
 from fixture import template_creation_utils
 from fixture import signals
@@ -213,7 +214,7 @@ class ComparatorLatchTemplate(TemplateMaster):
     class DynamicTest(TemplateMaster.Test):
 
         
-        num_samples = 10 #10
+        num_samples = 1 #10
 
         def __init__(self, *args, **kwargs):
             print("STATIC INIT")
@@ -295,7 +296,7 @@ class ComparatorLatchTemplate(TemplateMaster):
                 )
 
 
-            tester.poke(self.ports.clk, 0)
+            tester.poke(self.ports.clk, 1)
             tester.delay(wait_time)
 
             # feed through to first output, leave the rest off
@@ -311,7 +312,7 @@ class ComparatorLatchTemplate(TemplateMaster):
             tester.poke(self.ports.inp, inp_start)
             tester.poke(self.ports.inn, inn_start)
             tester.delay(wait_time)
-            
+
             tester.poke(self.ports.clk, 1)
             tester.poke(self.ports.inp, inp_end)
             tester.poke(self.ports.inn, inn_end)
@@ -430,7 +431,7 @@ class ComparatorLatchTemplate(TemplateMaster):
             axis[1].set_title("outn")
             axis[1].set_ylabel('voltage')
             axis[1].grid()
-            axis[2].plot( inn[0], inn[1] - inp[1],   label = "inn" )
+            axis[2].plot( inn[0], inp[1] - inn[1],   label = "inn" )
             axis[2].set_title("delta")
             axis[2].set_ylabel('voltage')
             axis[2].grid()            
@@ -478,8 +479,247 @@ class ComparatorLatchTemplate(TemplateMaster):
 
             return {}
 
+    class SweepTest(TemplateMaster.Test):
+
+        
+        num_samples = 2 #10
+
+        def __init__(self, *args, **kwargs):
+            print("STATIC INIT")
+            # set parameter algebra before parent checks it
+            nl_points = args[0].nonlinearity_points
+            self.IS_DEBUG_MODE = True
+            self.parameter_algebra = {
+            #'p1': {'cm_to_p1': 'in_cm', 'const_p1': '1'},
+            #'p2': {'cm_to_p2': 'in_cm', 'const_p2': '1'},
+            #'z1': {'cm_to_z1': 'in_cm', 'const_z1': '1'},
+            'p1': {'const_p1': '1'},
+            'p2': {'const_p2': '1'},
+            #'z1': {'const_z1': '1'},
+        }
+            super().__init__(*args, **kwargs)
+
+        def input_domain(self):
+
+            return []
+
+        def testbench(self, tester, values):
+
+
+            clk = self.signals.clk[0] if hasattr(self.signals.clk, '__getitem__') else self.signals.clk
+
+            cycles = npy.linspace(self.extras['sweep_values'][0], self.extras['sweep_values'][1])
+
+            measure_time = self.extras['sweep_dt'] * (len(cycles) + 1)
+
+            clko = tester.get_value(self.ports.clk, params=
+                    {'style':'block', 'duration': measure_time}
+                )
+
+            rp = tester.get_value(self.ports.outp, params=
+                    {'style':'block', 'duration': measure_time}
+                )
+            
+            rn = tester.get_value(self.ports.outn, params=
+                    {'style':'block', 'duration': measure_time}
+                )
+        
+            inp = tester.get_value(self.ports.inp, params=
+                    {'style':'block', 'duration': measure_time}
+                )
+            
+            inn = tester.get_value(self.ports.inn, params=
+                    {'style':'block', 'duration': measure_time}
+                )
+
+            tester.poke(self.ports.clk, 0)
+            tester.poke(self.ports.inp, 0)
+            tester.poke(self.ports.inn, self.extras['competing_v'])
+            tester.delay(10 * self.extras['sweep_dt'])
+
+
+            tester.poke(self.ports.clk, 1)
+            tester.poke(self.ports.inn, self.extras['competing_v'])
+            tester.delay(self.extras['sweep_dt'])
+
+            time = 0
+            period = self.extras['clks']['period']
+
+
+
+            for i, v in enumerate(cycles):
+                tester.poke(self.ports.inp, v)
+                #if i > (len(cycles) // 2):
+                #    tester.poke(self.ports.clk, 0)
+                #if i > (len(cycles) // 2) + 10:
+                #    tester.poke(self.ports.clk, 1)
+
+
+                tester.delay(self.extras['sweep_dt'])
+
+
+
+
+            """
+            limits = self.signals.inn.value
+            print("LIMITS: {}".format(limits))
+            limits = self.signals.inp.value
+            num = self.template.nonlinearity_points
+            results = []
+            prev_val = 0
+            for i in range(num):
+                #dc = limits[0] + i * (limits[1] - limits[0]) / (num-1)
+                #tester.poke(clk.spice_pin, 1)
+                tester.poke(self.ports.in_, prev_val)
+                tester.delay(0.01 * period)
+                tester.poke(self.ports.in_, dc)
+                prev_val = dc
+
+                settle_time = self.template.schedule_clk(tester, self.signals.out[0], 1, 0.5, values)
+                tester.delay(period / 2)
+                print('1: delaying', period/2)
+
+                # delays time "wait" for things to settle before reading
+                tester.delay(settle_time)
+                print('2: delaying ', settle_time)
+                read = self.template.read_value(tester, p, 0)
+
+                if settle_time < period / 2:
+                    tester.delay(period / 2 - settle_time)
+                    print('3: delaying', period/2 - settle_time)
+                results.append((dc, read))
+            tester.poke(self.ports.in_, prev_val)
+            tester.delay(0.01*period)
+
+
+            tester.delay(2*period)
+            """
+
+
+
+            """
+            print("========================rp========================")
+            print(rp)
+            print("========================rn========================")
+            print(rn)
+            """
+
+            return [rp, rn, inn, inp, clko]
+
+        def analysis(self, reads):
+            
+            print("========================outp========================")
+            print(reads)
+
+            outp = reads[0].value
+            outn = reads[1].value
+            inn = reads[2].value
+            inp = reads[3].value
+            clko = reads[4].value
+
+            print("========================outp========================")
+            print(outp[1])
+            print("========================outn========================")
+            print(outn[1])
+
+            print("IN_ANALYSIS_STAGE")
+            # haven't written good logic for if the timesteps don't match
+            if len(outp[0]) != len(outn[0]) or any(outp[0] != outn[0]):
+                print('interpolating to match timesteps')
+                outp = remove_repeated_timesteps(*outp)
+                outn = remove_repeated_timesteps(*outn)
+                inn  = remove_repeated_timesteps(*inn)
+                inp  = remove_repeated_timesteps(*inp)
+                clko  = remove_repeated_timesteps(*clko)
+
+                # hmm, timesteps don't match
+                # reasmple n with p's timesteps? Not ideal, but good enough
+                interpn = interpolate.InterpolatedUnivariateSpline(outn[0], outn[1])
+                interpinp = interpolate.InterpolatedUnivariateSpline(inn[0], inn[1])
+                interpinn = interpolate.InterpolatedUnivariateSpline(inp[0], inp[1])
+                interpcko = interpolate.InterpolatedUnivariateSpline(clko[0], clko[1])
+                resampled_outn = interpn(outp[0])
+                resampled_inn  = interpinn(outp[0])
+                resampled_inp  = interpinp(outp[0])
+                resampled_clko = interpcko(clko[0])
+                outn = outp[0], resampled_outn
+                inp  = outp[0], resampled_inn
+                inn  = outp[0], resampled_inp
+                clko = outp[0], resampled_clko
+
+            print("========================inp========================")
+            print(inp[1])
+            print("========================inn========================")
+            print(inn[1])
+            print("========================clk========================")
+            print(clko[1])
+
+            # we want to cut some off, but leave at least 60-15*2 ??
+            CUTOFF = 0#min(max(0, len(outp[0]) - 60), 15)
+
+            step_start_output = outp[1][0] - outn[1][0]
+            outdiff = outp[0], outp[1] - outn[1] - step_start_output
+
+            figure, axis = plt.subplots(4,1, sharex=True)
+            
+            axis[0].plot( outp[0] , outp[1], label = "outp" )
+            axis[0].set_title("outp")
+            axis[0].set_ylabel('voltage')
+            axis[0].grid()
+            axis[1].plot( outn[0] , outn[1], label = "outn" )
+            axis[1].set_title("outn")
+            axis[1].set_ylabel('voltage')
+            axis[1].grid()
+            axis[2].plot( inn[0], inp[1] - inn[1],   label = "inn" )
+            axis[2].set_title("delta")
+            axis[2].set_ylabel('voltage')
+            axis[2].grid()            
+            axis[3].plot( clko[0], clko[1],   label = "clk" )
+            axis[3].set_title("clk")
+            axis[3].set_ylabel('voltage')
+            axis[3].grid()
+            figure.suptitle(f'Plot for transient')
+
+            #plt.plot([min(y_meas), max(y_meas)], [min(y_meas), max(y_meas)], '--')
+            #plt.plot([0, max(y_meas)], [0, max(y_meas)], '--')
+
+            plt.show()
+
+            # FLIP
+            #outdiff = outdiff[0], -1 * outdiff[1]
+
+
+            ps, zs = extract_pzs(2, 1, outdiff[0][CUTOFF:], outdiff[1][CUTOFF:])
+            list(ps).sort(key=abs)
+            zs.sort()
+            print(ps)
+            print(zs)
+
+            return {'p1' : ps[0], 'p2': ps[1]}
+
+
+        def post_regression(self, results, data):
+            #return {}
+            if hasattr(self, 'IS_DEBUG_MODE'):
+                for param in results.keys():
+                    reg = results[param]
+
+                    y_meas = reg.model.endog
+                    y_pred = reg.model.predict(reg.params)
+
+                    plt.scatter(y_meas, y_pred)
+                    plt.title(f'Plot for {param}')
+                    plt.xlabel('Measured output values')
+                    plt.ylabel('Predicted output values based on inputs & model')
+                    #plt.plot([min(y_meas), max(y_meas)], [min(y_meas), max(y_meas)], '--')
+                    #plt.plot([0, max(y_meas)], [0, max(y_meas)], '--')
+                    plt.grid()
+                    plt.show()
+
+            return {}
 
     tests = [
-             DynamicTest
+                SweepTest,
+                #DynamicTest
             ]
 

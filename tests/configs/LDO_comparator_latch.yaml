@@ -49,6 +49,10 @@ extras:
 
     limits_diff: (-3.3, 3.3)
     limits_cm: (1.65, 1.66)
+    #for SweepTest
+    sweep_values: (0, 3.3)
+    competing_v: 1.6
+    sweep_dt: 1e-6
 
 
 
