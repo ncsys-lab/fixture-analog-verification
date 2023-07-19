@@ -27,17 +27,17 @@ pin:
         datatype: real
 
 template_pins:
-    inp: VREF
-    inn: VREG
+    inp: VREG
+    inn: VREF
     clk: CLK 
     outp: outp
     outn: outn
 
 extras:
-    approx_settling_time: 10e-7
+    approx_settling_time: 4e-9
     max_slope: 2e3
     clks:
-        unit: 10e-6
+        unit: 10e-7
         period: 10
         
         clk:
@@ -46,9 +46,10 @@ extras:
         out:
             10: sample
             4: read
-
-    limits_diff: (-3.3, 3.3)
-    limits_cm: (1.65, 1.66)
+    #for dynamictest
+    limits_VREG: (2.9, 3.0)
+    limits_VREF: (1.5, 1.7)
+    debug_plt: 0 #WARNING: IF 1, you will not get meaningful poles/zeros
     #for SweepTest
     sweep_values: (0, 3.3)
     competing_v: 1.6

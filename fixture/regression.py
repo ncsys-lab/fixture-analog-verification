@@ -285,6 +285,8 @@ class Regression:
             df_filtered = regression_data[df_row_mask]
 
             formula = self.make_formula(lhs_clean, [x[0] for x in rhs_info])
+            print(formula)
+            print(df_filtered)
             stats_model = smf.ols(formula, df_filtered)
             stat_results = stats_model.fit()
             results_entry = results[lhs]

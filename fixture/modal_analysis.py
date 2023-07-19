@@ -3,6 +3,7 @@ import scipy.optimize
 
 from fixture import PlotHelper
 from fixture.plot_helper import plt
+import matplotlib.pyplot as plt
 PLOT_COUNTER = 0
 
 
@@ -143,12 +144,23 @@ class ModalAnalysis:
         for coef, pole in zip(r, p):
             h_step_est = h_step_est + scale * coef * np.exp(pole*self.t)
             #print('Added coef', scale*coef, 'for pole', pole)
+
         return h_step_est
 
     def error_from_poles(self, poles, NZ):
         zs, dc = self.get_zeros(poles, NZ)
         h_step_est = self.step_response_from_pz(poles, zs, dc)
-        error = np.sum((h_step_est - self.h_step)**2, 0)
+        error = np.sum((np.absolute(h_step_est) - np.absolute(self.h_step))**2, 0)
+        if(error < 0.01):
+            print("ERROR: {}".format(error))
+            print("H_STEP_EST: {}".format(h_step_est))
+            print("H_STEP_ACT: {}".format(self.h_step))
+            plt.plot(self.t, h_step_est, label="estimate")
+            plt.plot(self.t, self.h_step, label="sim")
+            plt.legend(loc='best')
+            plt.xlabel('t')
+            plt.grid()
+            plt.show()
         return error
 
     def get_scale(self, ps, zs, dc):
@@ -202,18 +214,23 @@ class ModalAnalysis:
 
         zeros_opt, dc_opt = self.get_zeros(poles_opt, NZ)
 
-        return poles_opt, zeros_opt, dc_opt
+        return poles_opt, zeros_opt, dc_opt, self.error_from_poles(poles_opt, NZ)
 
 
     def extract_pzs(self, NP, NZ, known_poles):
         # TODO scaling
-        ps_scaled, zs_scaled, dc = self._fit_poles(NP, NZ, known_poles)
+
+        ps_scaled, zs_scaled, dc, err = self._fit_poles(NP, NZ, known_poles)
         ps = ps_scaled / self.scale
         zs = zs_scaled / self.scale
 
         # TODO this scale is unrelated to the scale above
         scale = self.get_scale(ps, zs, dc)
-        return ps, zs, scale
+        pole_error = self.error_from_poles(ps_scaled, NZ)
+        print("ERROR_FROM_POLES = {}".format(round(self.error_from_poles(ps_scaled, NZ), 10)))
+
+
+        return ps, zs, scale, err
 
 
 

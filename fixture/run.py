@@ -64,7 +64,7 @@ def _run(circuit_config_dict):
 
     all_checkpionts = {
         'choose_inputs': True,
-        'run_sim': True,
+        'run_sim': False,
         'run_analysis': True,
         'run_post_process': True,
         'run_regression': True,

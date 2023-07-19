@@ -8,6 +8,7 @@ import numpy as np
 from fixture.signals import SignalIn, SignalOut, SignalArray, parse_bus, \
     parse_name
 
+import json
 
 def add_vectors():
     raise NotImplemented
@@ -126,6 +127,7 @@ class Testbench():
             test_inputs[bus] = bus_data
 
         reads_template = self.test.testbench(self.tester, test_inputs)
+
         reads_optional = self.read_optional_outputs()
         return (reads_template, reads_optional)
     
@@ -144,7 +146,13 @@ class Testbench():
             #    self.result_processing_list.append((digital_mode, v_test, v_optional, reads))
             for i in range(self.test.num_samples):
                 reads = self.run_test_point(i)
+                
                 self.result_processing_list.append((digital_mode, i, reads))
+            
+
+
+
+
 
     def condense_results_analysis(self, results):
         # look at raw results to find input and output vectors
@@ -215,6 +223,20 @@ class Testbench():
         # results_other = {name: [value0, value1]}
         results_analysis = {}
         results_other = {}
+
+        dataorder = ['rp', 'rn', 'inn', 'inp', 'clko']
+        datastruct = {}
+
+        print(self.result_processing_list[0][2][0][0].value[0])
+        for i, result  in enumerate(self.result_processing_list):
+            datastruct[i] = dict(map(lambda rplist : (dataorder[rplist[0]], ( list(rplist[1].value[0]), list(rplist[1].value[1]))), enumerate(result[2][0])))
+        print(datastruct)
+        json_string = json.dumps(datastruct)
+        print(type(json_string))
+        jsonfile = open('jsondatadump', 'w')
+        jsonfile.write(json_string)
+        jsonfile.close()
+
         for loop_i, (m, result_i, (reads_template, reads_optional)) in enumerate(self.result_processing_list):
             # Note loop_i != result_i when there are multiple digital modes
 

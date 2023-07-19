@@ -3,6 +3,7 @@ import functools
 
 import numpy as npy
 import scipy
+import copy
 
 
 from fixture import TemplateMaster, PlotHelper
@@ -214,29 +215,22 @@ class ComparatorLatchTemplate(TemplateMaster):
     class DynamicTest(TemplateMaster.Test):
 
         
-        num_samples = 1 #10
+        num_samples = 30 #10
 
         def __init__(self, *args, **kwargs):
             print("STATIC INIT")
             # set parameter algebra before parent checks it
             nl_points = args[0].nonlinearity_points
-            self.IS_DEBUG_MODE = True
-            self.parameter_algebra = {
-            #'p1': {'cm_to_p1': 'in_cm', 'const_p1': '1'},
-            #'p2': {'cm_to_p2': 'in_cm', 'const_p2': '1'},
-            #'z1': {'cm_to_z1': 'in_cm', 'const_z1': '1'},
-            'p1': {'const_p1': '1'},
-            'p2': {'const_p2': '1'},
-            #'z1': {'const_z1': '1'},
-        }
+
+            self.parameter_algebra = {'pr1': {'const_pr1': '1'}, 'pr2': {'const_pr2': '1'}, 'pr3': {'const_pr3': '1'}, 'pr4': {'const_pr4': '1'}, 'pr5': {'const_pr5': '1'}, 'zr1': {'const_zr1': '1'}, 'zr2': {'const_zr2': '1'}, 'zr3': {'const_zr3': '1'}, 'zr4': {'const_zr4': '1'}, 'zr5': {'const_zr5': '1'}, 'pi1': {'const_pi1': '1'}, 'pi2': {'const_pi2': '1'}, 'pi3': {'const_pi3': '1'}, 'pi4': {'const_pi4': '1'}, 'pi5': {'const_pi5': '1'}, 'zi1': {'const_zi1': '1'}, 'zi2': {'const_zi2': '1'}, 'zi3': {'const_zi3': '1'}, 'zi4': {'const_zi4': '1'}, 'zi5': {'const_zi5': '1'}}
+
             super().__init__(*args, **kwargs)
 
         def input_domain(self):
-            in_cm = create_input_domain_signal('in_cm', self.extras['limits_cm'])
-            vmin, vmax = self.extras['limits_diff']
-            step_size = create_input_domain_signal('step_size', ((vmax-vmin)/2, vmax-vmin))
-            step_pos = create_input_domain_signal('step_pos', (0, 1))
-            return [in_cm, step_size, step_pos] +  self.template.get_clock_offset_domain() 
+            #this is setting bounds on the range of allowed differences between VREF and VREG
+            limits_vreg = create_input_domain_signal('limits_VREG', self.extras['limits_VREG'])
+            limits_vref = create_input_domain_signal('limits_VREF', self.extras['limits_VREF'] )
+            return [limits_vref, limits_vreg] +  self.template.get_clock_offset_domain() 
 
         def testbench(self, tester, values):
             wait_time = float(self.extras['approx_settling_time'])*2
@@ -245,125 +239,77 @@ class ComparatorLatchTemplate(TemplateMaster):
             clk = self.signals.clk[0] if hasattr(self.signals.clk, '__getitem__') else self.signals.clk
             assert isinstance(clk, signals.SignalIn)
 
-            # To see debug plots, also uncomment debug decorator for this class
-            np = self.template.nonlinearity_points
-            debug_time = np * period * 22
-            self.debug(tester, clk.spice_pin, debug_time)
-            #for p in self.ports.out:
-            #    self.debug(tester, p, debug_time)
+            #calculating where delta is going to fall: 
+            vref = values['limits_VREF']
+            vreg = values['limits_VREG']
 
-            print(self.ports)
-            self.debug(tester, self.ports.inp, debug_time)
-            self.debug(tester, self.ports.inn, debug_time)
-            if hasattr(self.ports, 'debug'):
-                self.debug(tester, self.ports.debug, debug_time)
+            if(self.extras['debug_plt'] == 1):
+                clko = tester.get_value(self.ports.clk, params=
+                    {'style':'block', 'duration': period / 2 + wait_time}
+                )
 
-            #self.debug(tester, self.template.dut.z_debug, debug_time)
+                rp = tester.get_value(self.ports.outp, params=
+                        {'style':'block', 'duration': period / 2 + wait_time}
+                    )
 
-            #self.debug(tester, self.template.dut.clk_v2t_e[0], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_e[1], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_eb[0], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_eb[1], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_gated[0], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_gated[1], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_l[0], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_l[1], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_lb[0], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2t_lb[1], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2tb_gated[0], debug_time)
-            #self.debug(tester, self.template.dut.clk_v2tb_gated[1], debug_time)
+                rn = tester.get_value(self.ports.outn, params=
+                        {'style':'block', 'duration': period / 2 + wait_time}
+                    )
 
-            # prevents overlapping points from confusing fault
+                inp = tester.get_value(self.ports.inp, params=
+                        {'style':'block', 'duration': period / 2 + wait_time}
+                    )
+
+                inn = tester.get_value(self.ports.inn, params=
+                        {'style':'block', 'duration': period / 2 + wait_time}
+                    )
+
+            #first we are going to precharge our clock signal! We wait period / 2 because this is an 
+            #assumed propagation delay around the systemm.
+
+            tester.poke(self.ports.clk, 0)
+            tester.delay(period / 4)
+
+            #Now change vref and vreg, propogation delay.
+
+            tester.poke(self.ports.inp, vreg)
+            tester.poke(self.ports.inn, vref)
+
+            sample_delay = 0
+
+            tester.delay((period / 4) - sample_delay)
+
+            #Clock = 0! Comparator should resolve the value now!
+            #Tell simulator to collect data here and use to compute poles/zeros for given delta
             
-            clko = tester.get_value(self.ports.clk, params=
-                    {'style':'block', 'duration': period + wait_time * 2}
+            
+            wait_time = wait_time + sample_delay
+
+            if(self.extras['debug_plt'] == 0):
+                clko = tester.get_value(self.ports.clk, params=
+                    {'style':'block', 'duration': wait_time }
                 )
 
-            rp = tester.get_value(self.ports.outp, params=
-                    {'style':'block', 'duration': period + wait_time * 2}
-                )
-            
-            rn = tester.get_value(self.ports.outn, params=
-                    {'style':'block', 'duration': period + wait_time * 2}
-                )
-        
-            inp = tester.get_value(self.ports.inp, params=
-                    {'style':'block', 'duration': period + wait_time * 2}
-                )
-            
-            inn = tester.get_value(self.ports.inn, params=
-                    {'style':'block', 'duration': period + wait_time * 2}
-                )
+                rp = tester.get_value(self.ports.outp, params=
+                        {'style':'block', 'duration': wait_time}
+                    )
 
+                rn = tester.get_value(self.ports.outn, params=
+                        {'style':'block', 'duration': wait_time}
+                    )
+
+                inp = tester.get_value(self.ports.inp, params=
+                        {'style':'block', 'duration': wait_time}
+                    )
+
+                inn = tester.get_value(self.ports.inn, params=
+                        {'style':'block', 'duration': wait_time}
+                    )
+
+            tester.delay(sample_delay)
 
             tester.poke(self.ports.clk, 1)
-            tester.delay(wait_time)
 
-            # feed through to first output, leave the rest off
-            # TODO should maybe leave half open, affects charge sharing?
-
-            in_cm = values['in_cm']
-            vmin, vmax = self.extras['limits_diff']
-            step_start = vmin + ((vmax-vmin) - values['step_size']) * values['step_pos']
-            step_end = step_start + values['step_size']
-            inp_start, inn_start = in_cm + step_start/2, in_cm - step_start/2
-            inp_end, inn_end = in_cm + step_end/2, in_cm - step_end/2
-
-            tester.poke(self.ports.inp, inp_start)
-            tester.poke(self.ports.inn, inn_start)
-            tester.delay(wait_time)
-
-            tester.poke(self.ports.clk, 1)
-            tester.poke(self.ports.inp, inp_end)
-            tester.poke(self.ports.inn, inn_end)
-
-
-
-
-
-            """
-            limits = self.signals.inn.value
-            print("LIMITS: {}".format(limits))
-            limits = self.signals.inp.value
-            num = self.template.nonlinearity_points
-            results = []
-            prev_val = 0
-            for i in range(num):
-                #dc = limits[0] + i * (limits[1] - limits[0]) / (num-1)
-                #tester.poke(clk.spice_pin, 1)
-                tester.poke(self.ports.in_, prev_val)
-                tester.delay(0.01 * period)
-                tester.poke(self.ports.in_, dc)
-                prev_val = dc
-
-                settle_time = self.template.schedule_clk(tester, self.signals.out[0], 1, 0.5, values)
-                tester.delay(period / 2)
-                print('1: delaying', period/2)
-
-                # delays time "wait" for things to settle before reading
-                tester.delay(settle_time)
-                print('2: delaying ', settle_time)
-                read = self.template.read_value(tester, p, 0)
-
-                if settle_time < period / 2:
-                    tester.delay(period / 2 - settle_time)
-                    print('3: delaying', period/2 - settle_time)
-                results.append((dc, read))
-            tester.poke(self.ports.in_, prev_val)
-            tester.delay(0.01*period)
-
-
-            tester.delay(2*period)
-            """
-
-
-
-            """
-            print("========================rp========================")
-            print(rp)
-            print("========================rn========================")
-            print(rn)
-            """
             tester.delay(wait_time * 1.1)
             return [rp, rn, inn, inp, clko]
 
@@ -418,45 +364,65 @@ class ComparatorLatchTemplate(TemplateMaster):
             # we want to cut some off, but leave at least 60-15*2 ??
             CUTOFF = 0#min(max(0, len(outp[0]) - 60), 15)
 
-            step_start_output = outp[1][0] - outn[1][0]
-            outdiff = outp[0], outp[1] - outn[1] - step_start_output
-
-            figure, axis = plt.subplots(4,1, sharex=True)
+            step_start_output = outp[1][0]
+            outdiff = outp[0], outp[1]
             
-            axis[0].plot( outp[0] , outp[1], label = "outp" )
-            axis[0].set_title("outp")
-            axis[0].set_ylabel('voltage')
-            axis[0].grid()
-            axis[1].plot( outn[0] , outn[1], label = "outn" )
-            axis[1].set_title("outn")
-            axis[1].set_ylabel('voltage')
-            axis[1].grid()
-            axis[2].plot( inn[0], inp[1] - inn[1],   label = "inn" )
-            axis[2].set_title("delta")
-            axis[2].set_ylabel('voltage')
-            axis[2].grid()            
-            axis[3].plot( clko[0], clko[1],   label = "clk" )
-            axis[3].set_title("clk")
-            axis[3].set_ylabel('voltage')
-            axis[3].grid()
-            figure.suptitle(f'Plot for transient')
+            if(self.extras['debug_plt'] == 1):
+                figure, axis = plt.subplots(4,1, sharex=True)
 
-            #plt.plot([min(y_meas), max(y_meas)], [min(y_meas), max(y_meas)], '--')
-            #plt.plot([0, max(y_meas)], [0, max(y_meas)], '--')
 
-            plt.show()
+                axis[0].plot( outp[0] , outp[1], label = "outp" )
+                axis[0].set_title("outp")
+                axis[0].set_ylabel('voltage')
+                axis[0].grid()
+                axis[1].plot( outn[0] , outn[1], label = "outn" )
+                axis[1].set_title("outn")
+                axis[1].set_ylabel('voltage')
+                axis[1].grid()
+                axis[2].plot( inn[0], inp[1] - inn[1],   label = "inn" )
+                axis[2].set_title("delta")
+                axis[2].set_ylabel('voltage')
+                axis[2].grid()            
+                axis[3].plot( clko[0], clko[1],   label = "clk" )
+                axis[3].set_title("clk")
+                axis[3].set_ylabel('voltage')
+                axis[3].grid()
+                figure.suptitle(f'Plot for transient')
+
+                #plt.plot([min(y_meas), max(y_meas)], [min(y_meas), max(y_meas)], '--')
+                #plt.plot([0, max(y_meas)], [0, max(y_meas)], '--')
+
+                plt.show()
 
             # FLIP
             #outdiff = outdiff[0], -1 * outdiff[1]
+            err = 100
+            NP = 5
+            NZ = 5
+            while err > 10:
+                ps, zs, err = extract_pzs(NP, NZ, outdiff[0][CUTOFF:], outdiff[1][CUTOFF:] )
+                print("DELTA {}".format(inp[1][0] - inn[1][0]))
+                print("N_POLES {}".format(NP))
+                print("N_ZEROS {}".format(NZ))
+                print("ERROR_FROM_POLES = {}".format(round(err, 10)))
+                NP = NP + 1
+                NZ = NZ + 1
 
-
-            ps, zs = extract_pzs(2, 1, outdiff[0][CUTOFF:], outdiff[1][CUTOFF:])
             list(ps).sort(key=abs)
             zs.sort()
             print(ps)
             print(zs)
-
-            return {'p1' : ps[0], 'p2': ps[1]}
+            pr_dict = dict(map( lambda p : ( "pr" + str(p[0] + 1) , p[1]), enumerate(npy.real(ps))))
+            zr_dict = dict(map( lambda z : ( "zr" + str(z[0] + 1) , z[1]), enumerate(npy.real(zs))))
+            pi_dict = dict(map( lambda p : ( "pi" + str(p[0] + 1) , p[1]), enumerate(npy.imag(ps))))
+            zi_dict = dict(map( lambda z : ( "zi" + str(z[0] + 1) , z[1]), enumerate(npy.imag(zs))))
+            full_dict = pr_dict | zr_dict | pi_dict | zi_dict
+            print(full_dict)
+            self.parameter_algebra = copy.deepcopy(full_dict)
+            print(self.parameter_algebra)
+            self.parameter_algebra = dict(map( lambda p : (p[0], {'const_' + p[0] : '1'}), self.parameter_algebra.items()))
+            print(self.parameter_algebra)
+            return full_dict
 
 
         def post_regression(self, results, data):
@@ -549,10 +515,10 @@ class ComparatorLatchTemplate(TemplateMaster):
 
             for i, v in enumerate(cycles):
                 tester.poke(self.ports.inp, v)
-                #if i > (len(cycles) // 2):
-                #    tester.poke(self.ports.clk, 0)
-                #if i > (len(cycles) // 2) + 10:
-                #    tester.poke(self.ports.clk, 1)
+                if i > (len(cycles) // 2):
+                    tester.poke(self.ports.clk, 0)
+                if i > (len(cycles) // 2) + 10:
+                    tester.poke(self.ports.clk, 1)
 
 
                 tester.delay(self.extras['sweep_dt'])
@@ -719,7 +685,7 @@ class ComparatorLatchTemplate(TemplateMaster):
             return {}
 
     tests = [
-                SweepTest,
-                #DynamicTest
+                #SweepTest,
+                DynamicTest
             ]
 

@@ -50,7 +50,7 @@ def extract_pzs(nps, nzs, x, y):
     #plt.show()
 
     # step response definitely has a pole at zero
-    ps_step, zs, scale = ma.extract_pzs(nps+1, nzs, [0])
+    ps_step, zs, scale, error = ma.extract_pzs(nps+1, nzs, [0])
     assert ps_step[0] == 0
     ps = ps_step[1:]
     ps = ps / (2*np.pi)
@@ -66,7 +66,7 @@ def extract_pzs(nps, nzs, x, y):
 
     #bode_plot(ps, zs)
 
-    return (pad(ps, nps), pad(zs, nzs))
+    return (pad(ps, nps), pad(zs, nzs), error)
 
 
 def dynamic(template):
